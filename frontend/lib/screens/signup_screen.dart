@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 import 'package:animate_do/animate_do.dart';
 import 'package:ratip/theme/app_theme.dart';
 import 'package:ratip/widgets/glass_container.dart';
@@ -14,10 +15,13 @@ class SignUpScreen extends StatefulWidget {
 
 class _SignUpScreenState extends State<SignUpScreen> {
   final _nicknameController = TextEditingController();
-
   final _passwordController = TextEditingController();
   bool _isLoading = false;
   bool _obscurePassword = true;
+
+  // API 엔드포인트 (환경에 따라 수정)
+  final String _apiBaseUrl = const String.fromEnvironment('API_URL', 
+    defaultValue: 'http://localhost:5000');
 
   Future<void> _signUp() async {
     if (_nicknameController.text.isEmpty || _passwordController.text.isEmpty) {
@@ -42,37 +46,18 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
     setState(() => _isLoading = true);
     try {
-      // 1. Check for duplicate nickname
-      final existingUser = await Supabase.instance.client
-          .from('profiles')
-          .select()
-          .eq('nickname', _nicknameController.text.trim())
-          .maybeSingle();
-
-      if (existingUser != null) {
-        throw '이미 존재하는 닉네임입니다.';
-      }
-
-      // 2. Generate a unique email from nickname
-      final email = '${_nicknameController.text.trim().toLowerCase().replaceAll(' ', '_')}@ratip.local';
-
-      // 3. Create auth user with email and password
-      final AuthResponse response = await Supabase.instance.client.auth.signUp(
-        email: email,
-        password: _passwordController.text.trim(),
+      final response = await http.post(
+        Uri.parse('$_apiBaseUrl/api/auth/signup'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'nickname': _nicknameController.text.trim(),
+          'password': _passwordController.text.trim(),
+        }),
       );
 
-      if (response.user == null) {
-        throw '회원가입에 실패했습니다.';
-      }
+      if (!mounted) return;
 
-      // 4. Update nickname in the profile (auto-created by trigger)
-      await Supabase.instance.client
-          .from('profiles')
-          .update({'nickname': _nicknameController.text.trim()})
-          .eq('id', response.user!.id);
-
-      if (mounted) {
+      if (response.statusCode == 201) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('✅ 계정이 생성되었습니다! 이제 로그인해주세요.'),
@@ -80,6 +65,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
           ),
         );
         Navigator.pop(context);
+      } else {
+        final data = jsonDecode(response.body);
+        throw data['message'] ?? '회원가입 실패';
       }
     } catch (error) {
       if (mounted) {

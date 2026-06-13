@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 import 'package:animate_do/animate_do.dart';
 import 'package:ratip/theme/app_theme.dart';
 import 'package:ratip/widgets/glass_container.dart';
@@ -20,6 +21,10 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
   bool _obscurePassword = true;
 
+  // API 엔드포인트 (환경에 따라 수정)
+  final String _apiBaseUrl = const String.fromEnvironment('API_URL', 
+    defaultValue: 'http://localhost:5000');
+
   Future<void> _signIn() async {
     if (_nicknameController.text.isEmpty || _passwordController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -33,28 +38,38 @@ class _LoginScreenState extends State<LoginScreen> {
 
     setState(() => _isLoading = true);
     try {
-      // 1. Get the user profile by nickname to find their email
-      final profile = await Supabase.instance.client
-          .from('profiles')
-          .select()
-          .eq('nickname', _nicknameController.text.trim())
-          .maybeSingle();
-
-      if (profile == null) {
-        throw '닉네임을 찾을 수 없습니다.';
-      }
-
-      // 2. Sign in using email and password
-      await Supabase.instance.client.auth.signInWithPassword(
-        email: profile['email'],
-        password: _passwordController.text.trim(),
+      final response = await http.post(
+        Uri.parse('$_apiBaseUrl/api/auth/login'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'nickname': _nicknameController.text.trim(),
+          'password': _passwordController.text.trim(),
+        }),
       );
 
-      if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const MainMapScreen()),
+      if (!mounted) return;
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        
+        // 로그인 성공
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ 로그인 성공!'),
+            backgroundColor: Colors.green,
+          ),
         );
+
+        // 메인 화면으로 이동 (사용자 정보 전달 가능)
+        if (mounted) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const MainMapScreen()),
+          );
+        }
+      } else {
+        final data = jsonDecode(response.body);
+        throw data['message'] ?? '로그인 실패';
       }
     } catch (error) {
       if (mounted) {
