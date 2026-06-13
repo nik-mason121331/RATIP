@@ -21,18 +21,34 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _obscurePassword = true;
 
   Future<void> _signIn() async {
+    if (_nicknameController.text.isEmpty || _passwordController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('닉네임과 비밀번호를 입력해주세요.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
     try {
-      final userData = await Supabase.instance.client
+      // 1. Get the user profile by nickname to find their email
+      final profile = await Supabase.instance.client
           .from('profiles')
           .select()
           .eq('nickname', _nicknameController.text.trim())
-          .eq('password', _passwordController.text.trim())
           .maybeSingle();
 
-      if (userData == null) {
-        throw '닉네임 또는 비밀번호가 일치하지 않습니다.';
+      if (profile == null) {
+        throw '닉네임을 찾을 수 없습니다.';
       }
+
+      // 2. Sign in using email and password
+      await Supabase.instance.client.auth.signInWithPassword(
+        email: profile['email'],
+        password: _passwordController.text.trim(),
+      );
 
       if (mounted) {
         Navigator.pushReplacement(
@@ -43,7 +59,10 @@ class _LoginScreenState extends State<LoginScreen> {
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(error.toString()), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text(error.toString()),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     } finally {

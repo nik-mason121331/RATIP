@@ -20,16 +20,29 @@ class _SignUpScreenState extends State<SignUpScreen> {
   bool _obscurePassword = true;
 
   Future<void> _signUp() async {
-    if (_nicknameController.text.isEmpty) {
+    if (_nicknameController.text.isEmpty || _passwordController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a nickname'), backgroundColor: Colors.red),
+        const SnackBar(
+          content: Text('닉네임과 비밀번호를 입력해주세요.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    if (_passwordController.text.length < 6) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('비밀번호는 최소 6자 이상이어야 합니다.'),
+          backgroundColor: Colors.red,
+        ),
       );
       return;
     }
 
     setState(() => _isLoading = true);
     try {
-      // 1. 중복 닉네임 체크
+      // 1. Check for duplicate nickname
       final existingUser = await Supabase.instance.client
           .from('profiles')
           .select()
@@ -40,22 +53,41 @@ class _SignUpScreenState extends State<SignUpScreen> {
         throw '이미 존재하는 닉네임입니다.';
       }
 
-      // 2. 프로필 생성
-      await Supabase.instance.client.from('profiles').insert({
-        'nickname': _nicknameController.text.trim(),
-        'password': _passwordController.text.trim(),
-      });
-      
+      // 2. Generate a unique email from nickname
+      final email = '${_nicknameController.text.trim().toLowerCase().replaceAll(' ', '_')}@ratip.local';
+
+      // 3. Create auth user with email and password
+      final AuthResponse response = await Supabase.instance.client.auth.signUp(
+        email: email,
+        password: _passwordController.text.trim(),
+      );
+
+      if (response.user == null) {
+        throw '회원가입에 실패했습니다.';
+      }
+
+      // 4. Update nickname in the profile (auto-created by trigger)
+      await Supabase.instance.client
+          .from('profiles')
+          .update({'nickname': _nicknameController.text.trim()})
+          .eq('id', response.user!.id);
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('✅ 계정이 생성되었습니다! 이제 로그인해주세요.')),
+          const SnackBar(
+            content: Text('✅ 계정이 생성되었습니다! 이제 로그인해주세요.'),
+            backgroundColor: Colors.green,
+          ),
         );
         Navigator.pop(context);
       }
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(error.toString()), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text(error.toString()),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     } finally {
