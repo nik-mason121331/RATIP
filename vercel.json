@@ -9,17 +9,18 @@
       }
     },
     {
-      "src": "frontend/web",
-      "use": "@vercel/static-build",
-      "config": {
-        "distDir": "frontend/web"
-      }
+      "src": "frontend/web/**",
+      "use": "@vercel/static"
     }
   ],
   "routes": [
     {
       "src": "/api/(.*)",
       "dest": "backend/server/app.py"
+    },
+    {
+      "src": "/(.*\\..+)",
+      "dest": "frontend/web/$1"
     },
     {
       "src": "/(.*)",
